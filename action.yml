@@ -1,0 +1,41 @@
+name: 'KeyWatch - API key leak guard'
+description: >-
+  Fail the build if OpenAI/Anthropic API keys are found in the repository
+  (and optionally in its full git history). Keys are printed masked only.
+author: 'bokaranovic'
+branding:
+  icon: 'shield'
+  color: 'purple'
+
+inputs:
+  paths:
+    description: 'Files/directories to scan (space-separated)'
+    required: false
+    default: '.'
+  history:
+    description: 'Also scan the full git history (requires actions/checkout with fetch-depth: 0)'
+    required: false
+    default: 'true'
+  max-size:
+    description: 'Max file size to scan, in MB'
+    required: false
+    default: '2'
+
+runs:
+  using: 'composite'
+  steps:
+    - shell: bash
+      env:
+        KW_PATHS: ${{ inputs.paths }}
+        KW_HISTORY: ${{ inputs.history }}
+        KW_MAXSIZE: ${{ inputs.max-size }}
+      run: |
+        rc=0
+        python3 "$GITHUB_ACTION_PATH/keywatch.py" scan $KW_PATHS --max-size "$KW_MAXSIZE" --log "$RUNNER_TEMP/keywatch.log" || rc=1
+        if [ "$KW_HISTORY" = "true" ]; then
+          python3 "$GITHUB_ACTION_PATH/keywatch.py" git . --log "$RUNNER_TEMP/keywatch.log" || rc=1
+        fi
+        if [ "$rc" != "0" ]; then
+          echo "::error::KeyWatch found exposed API keys. Remove them, then REVOKE the keys - assume they are compromised."
+        fi
+        exit $rc
