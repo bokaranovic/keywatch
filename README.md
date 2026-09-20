@@ -1,5 +1,7 @@
 # KeyWatch
 
+[![self-check](https://github.com/bokaranovic/keywatch/actions/workflows/self-check.yml/badge.svg)](https://github.com/bokaranovic/keywatch/actions/workflows/self-check.yml)
+
 **Catch OpenAI & Anthropic API keys before they leak.**
 
 KeyWatch finds exposed API keys - OpenAI (`sk-proj-...`, `sk-svcacct-...`, `sk-admin-...`, legacy `sk-...`) and Anthropic (`sk-ant-...`) - in files, git history, staged changes and your own GitHub repositories. It can scan on demand, watch directories in real time, and **block keys from ever being committed or pushed**.
