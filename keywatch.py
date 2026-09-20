@@ -35,11 +35,11 @@ import urllib.parse
 import urllib.request
 from datetime import datetime
 
-VERSION = "1.2"
+VERSION = "1.3"
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_LOG = os.path.join(HERE, "keywatch.log")
 
-# ---------------------------------------------------------------- detekcija
+# ---------------------------------------------------------------- detection
 TOKEN_PATTERNS = [
     ("openai", "high", re.compile(r"\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}")),
     ("openai", "high", re.compile(r"\bsk-[A-Za-z0-9]{40,}")),
@@ -61,7 +61,7 @@ PLACEHOLDER_WORDS = (
 
 GH_TERMS = ["sk-proj-", "sk-svcacct-", "sk-admin-", "sk-ant-",
             "OPENAI_API_KEY", "ANTHROPIC_API_KEY"]
-# Tipovi fajlova koji se automatski pretrazuju na GitHubu (kao dork sa slike)
+# File types automatically searched on GitHub (the "dork" pattern)
 GH_RISKY_EXTS = ["xml", "json", "properties", "sql", "txt", "log", "tmp", "bak"]
 
 SKIP_DIRS = {
@@ -107,7 +107,7 @@ def looks_placeholder(secret):
 
 
 def detect_in_line(line):
-    """Vrati listu pogodaka: provider, confidence, secret, span."""
+    """Return a list of hits: provider, confidence, secret, span."""
     hits = []
     token_spans = []
     for provider, conf, rx in TOKEN_PATTERNS:
@@ -123,7 +123,7 @@ def detect_in_line(line):
         value = m.group(2)
         span = m.span(2)
         if any(not (span[1] <= a or span[0] >= b) for a, b in token_spans):
-            continue  # isti tekst je već uhvaćen kao token
+            continue  # same text was already caught as a token
         if looks_placeholder(value) or value.upper() == var:
             continue
         hits.append({"provider": ENV_PROVIDER.get(var, "nepoznat"),
@@ -139,7 +139,7 @@ def redact(line, hits):
     return out.strip()
 
 
-# ---------------------------------------------------------------- fajlovi
+# ---------------------------------------------------------------- files
 def iter_files(target, ignores=(), max_size=2 * 1024 * 1024):
     if os.path.isfile(target):
         yield target
@@ -162,7 +162,7 @@ def iter_files(target, ignores=(), max_size=2 * 1024 * 1024):
 
 
 def scan_file(path, source, extra=None):
-    """Skeniraj jedan fajl; vrati listu nalaza (dict)."""
+    """Scan a single file; return a list of findings (dicts)."""
     findings = []
     try:
         with open(path, "rb") as fh:
@@ -203,7 +203,7 @@ def fmt_finding(rec):
     return "  [%s/%s] %s  %s" % (rec["provider"], rec["confidence"], loc, rec["masked"])
 
 
-# ---------------------------------------------------------------- log / alarm
+# ---------------------------------------------------------------- log / alerts
 class Log(object):
     def __init__(self, path):
         self.path = path
@@ -232,7 +232,7 @@ class Log(object):
 
 
 def _load_env_file():
-    """Ucitaj TELEGRAM_* iz hermes .env ako vec nisu u okruzenju."""
+    """Load TELEGRAM_* from a Hermes .env if not already in the environment."""
     cands = [
         os.environ.get("KEYWATCH_ENV_FILE"),
         os.path.join(os.path.expanduser("~"), "AppData", "Local", "hermes", ".env"),
@@ -292,7 +292,7 @@ def load_ignores(args):
     return ignores
 
 
-# ---------------------------------------------------------------- komande
+# ---------------------------------------------------------------- commands
 def cmd_scan(args):
     ignores = load_ignores(args)
     max_b = int(args.max_size * 1024 * 1024)
@@ -366,7 +366,7 @@ def cmd_watch(args):
                         if pair in known:
                             continue
                         known.add(pair)
-                        print("[ALARM] %s%s" % (now_iso(), fmt_finding(rec)))
+                        print("[ALERT] %s%s" % (now_iso(), fmt_finding(rec)))
                         log.add(rec)
                         ok = tg_send("KEYWATCH ALERT: %s key\n%s:%s\n%s" % (
                             rec["provider"], rec["file"], rec.get("line", "?"), rec["masked"]))
@@ -390,8 +390,8 @@ def _check_repo(repo):
 
 
 def _history_findings(repo, revs=("--all",), err=None):
-    """Generator: nalazi iz git historije (default: sve grane).
-    Ako je dat `err` dict, upisuje rc iz `git log` (0 = ok)."""
+    """Generate findings from git history (default: all branches).
+    If an `err` dict is given, it receives the `git log` rc (0 = ok)."""
     cmd = (["git", "-C", repo, "log"] + list(revs) +
            ["-p", "-U0", "--no-color",
             "--date=iso", "--pretty=format:@@KW@@%H|%an|%ad|%s"])
@@ -481,11 +481,11 @@ def cmd_gitroot(args):
     return 1 if total else 0
 
 
-REDACT_PLACEHOLDER = "UKLONJENO_KEYWATCH"
+REDACT_PLACEHOLDER = "KEY_REMOVED_BY_KEYWATCH"
 
 
 def _staged_scan(repo):
-    """Vrati (nalazi, mapa fajl->skup_kljuceva, greska)."""
+    """Return (findings, mapping file -> set of keys, error)."""
     cmd = ["git", "-C", repo, "diff", "--cached", "-U0", "--no-color"]
     r = subprocess.run(cmd, capture_output=True, text=True,
                        encoding="utf-8", errors="replace")
@@ -522,7 +522,7 @@ def cmd_staged(args):
     findings, redactions, err = _staged_scan(repo)
     if err:
         print("  ! git error: %s" % err)
-        return 0  # ne blokiraj commit zbog nase greske
+        return 0  # do not block the commit because of our own error
     for rec in findings:
         print(fmt_finding(rec))
         log.add(rec)
@@ -596,8 +596,8 @@ def cmd_prepush(args):
                 and _rev_exists(repo, remote_sha)):
             revs = ["%s..%s" % (remote_sha, local_sha)]
         else:
-            # remote ref ne postoji lokalno (ili je novi branch) -> skeniraj
-            # CIJELU historiju koja se salje (sigurnije od praznog skena)
+            # remote ref does not exist locally (or is a new branch) -> scan
+            # the ENTIRE history being pushed (safer than an empty scan)
             revs = [local_sha]
         err = {}
         for rec in _history_findings(repo, revs, err):
@@ -701,12 +701,12 @@ def _fetch_file(repo_full, path):
     r = _gh_raw(["api", "-H", "Accept: application/vnd.github.raw", url])
     if r.returncode != 0:
         msg = (r.stderr or r.stdout or "").strip().replace("\n", " ")
-        return None, (msg[-140:] if msg else "gh greska")
+        return None, (msg[-140:] if msg else "gh error")
     return r.stdout, None
 
 
 def _verify_content(text):
-    """Skeniraj sadrzaj fajla sa GitHub-a: stvarni kljuc ili samo pominjanje."""
+    """Scan file content fetched from GitHub: real key or just a mention."""
     hits = []
     for ln, line in enumerate((text or "").splitlines(), 1):
         for h in detect_in_line(line):
@@ -824,7 +824,7 @@ def cmd_github(args):
 
 
 def _fx(*parts):
-    """Sastavi test-string u runtime-u (da sam fajl ostane 'cist' za skenere)."""
+    """Assemble a test string at runtime (so this file itself stays clean for scanners)."""
     return "".join(parts)
 
 
@@ -861,7 +861,7 @@ def cmd_selftest(args):
 
 
 def cmd_stats(args):
-    """GLOBALNA statistika: samo brojevi iz GitHub pretrage (nista se ne skida)."""
+    """GLOBAL statistics: counts only from GitHub search (nothing is fetched)."""
     terms = [t.strip() for t in (args.terms or "").split(",") if t.strip()]
     exts = [e.strip().lstrip("*.").lower() for e in (args.exts or "").split(",") if e.strip()]
     ext_term = args.ext_term or (terms[0] if terms else "")
@@ -889,8 +889,8 @@ def cmd_stats(args):
 
 # ---------------------------------------------------------------- main
 def add_log(sp):
-    # SUPPRESS: ako --log nije dat na podkomandi, ne diraj vrijednost iz
-    # glavnog parsera (argparse bi je inace prepisao defaultom)
+    # SUPPRESS: when --log is not passed on the subcommand, keep the value
+    # from the main parser (argparse would otherwise overwrite it with the default)
     sp.add_argument("--log", default=argparse.SUPPRESS,
                     help="JSONL file for findings (default: next to the script)")
 

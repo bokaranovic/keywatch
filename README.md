@@ -13,8 +13,6 @@ KeyWatch finds exposed API keys - OpenAI (`sk-proj-...`, `sk-svcacct-...`, `sk-a
 - Global stats - how many keys are exposed on GitHub (counts only).
 - Privacy by design - keys are never printed or stored in full: output is masked (`sk-proj-AbCdEf...9xYz`) and findings keep only a SHA-256 fingerprint. The GitHub audit only ever looks at *your own* account and never collects other people's keys.
 
-Srpska verzija: [README.sr.md](README.sr.md)
-
 ## Requirements
 
 Python 3.8+ - no dependencies. For the GitHub audit: the [`gh` CLI](https://cli.github.com) logged in (`gh auth login`).
@@ -56,7 +54,7 @@ python3 keywatch.py hook ~/projects/myapp            # block mode
 python3 keywatch.py hook ~/projects/myapp --redact   # auto-remove mode
 ```
 
-- **pre-commit** - scans staged changes before every commit. With `--redact` keys are replaced by `UKLONJENO_KEYWATCH`, the file is re-staged and the commit proceeds; without it the commit is blocked.
+- **pre-commit** - scans staged changes before every commit. With `--redact` keys are replaced by `KEY_REMOVED_BY_KEYWATCH`, the file is re-staged and the commit proceeds; without it the commit is blocked.
 - **pre-push** - scans every commit that is about to leave your machine (including existing history) and blocks the push if a key is found. If the scan cannot run for some reason, it fails **closed** (blocks).
 
 Existing hooks are backed up as `.bak`.
